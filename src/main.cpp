@@ -10,7 +10,7 @@
 #define FAULT_CONFIRM_COUNT 3
 #define RECOVERY_CONFIRM_COUNT 3
 
-// TODO: Calculate moisture delta, go into FAULT if larger than MOISTURE_DELTA_THRESHOLD
+// TODO: Debug schedule misses
 
 enum State { INIT, IDLE, CHECK, WATERING, FAULT, RECOVERY }; 
 enum FaultCode { NONE, SENSOR_INVALID }; 
