@@ -10,7 +10,8 @@
 #define FAULT_CONFIRM_COUNT 3
 #define RECOVERY_CONFIRM_COUNT 3
 
-// TODO: Debug schedule misses
+// TODO: Debug state machine sticking at CHECK
+// TODO: Increase RECOVERY_CONFIRM_COUNT to ensure proper connections
 
 enum State { INIT, IDLE, CHECK, WATERING, FAULT, RECOVERY }; 
 enum FaultCode { NONE, SENSOR_INVALID }; 
@@ -67,10 +68,16 @@ void updateStateMachine() {
       }
       break;
     case CHECK:
+      Serial.print("Now: ");
+      Serial.println(now);
+      Serial.print("Next Release: ");
+      Serial.println(nextRelease);
       lateness = now - nextRelease;
       scheduleMissesThisCycle = lateness / T_sample;
       scheduleMisses += scheduleMissesThisCycle;
       nextRelease += (scheduleMissesThisCycle + 1) * T_sample;
+      Serial.print("Next Next Release: ");
+      Serial.println(nextRelease);
 
       sampleStart = micros();
       moistureValue = analogRead(SENSOR_PIN);
@@ -144,6 +151,8 @@ void updateStateMachine() {
 }
 
 void logValues() {
+  Serial.print("State: ");
+  Serial.println(state);
   Serial.print("Moisture Value: ");
   Serial.println(moistureValue);
 
