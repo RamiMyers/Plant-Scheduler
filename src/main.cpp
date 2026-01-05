@@ -8,18 +8,16 @@
 #define WET_THRESHOLD 195
 #define MOISTURE_DELTA_THRESHOLD 5
 #define FAULT_CONFIRM_COUNT 3
-#define RECOVERY_CONFIRM_COUNT 3
-
-// TODO: Debug state machine sticking at CHECK
-// TODO: Increase RECOVERY_CONFIRM_COUNT to ensure proper connections
+#define RECOVERY_CONFIRM_COUNT 100
 
 enum State { INIT, IDLE, CHECK, WATERING, FAULT, RECOVERY }; 
 enum FaultCode { NONE, SENSOR_INVALID }; 
 
 // Constants
-const unsigned long T_sample = 1000000;
-const unsigned long T_budget = 500000;
-const unsigned long T_pump_max = 1000000;
+const unsigned long T_sample = 1000000UL;
+const unsigned long T_budget = 500000UL;
+const unsigned long T_pump_max = 1000000UL;
+const unsigned long T_settle = 5000000UL;
 // Cycle Timers
 unsigned long now, nextRelease, lateness;
 // Sample Timers
@@ -68,10 +66,6 @@ void updateStateMachine() {
       }
       break;
     case CHECK:
-      Serial.print("Now: ");
-      Serial.println(now);
-      Serial.print("Next Release: ");
-      Serial.println(nextRelease);
       lateness = now - nextRelease;
       scheduleMissesThisCycle = lateness / T_sample;
       scheduleMisses += scheduleMissesThisCycle;
@@ -95,6 +89,8 @@ void updateStateMachine() {
           lastFaultCode = SENSOR_INVALID;
           faultCount++;
           state = FAULT;
+        } else {
+          state = IDLE;
         }
       } else if (moistureValue >= DRY_THRESHOLD) {
         faultConfirmCounter = 0;
