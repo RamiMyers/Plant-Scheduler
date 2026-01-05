@@ -2,13 +2,15 @@
 #define SENSOR_PIN A0
 #define PUMP_PIN_B1_A 9
 #define PUMP_PIN_B2_A 10
-#define VALID_MAX 470
+#define VALID_MAX 500
 #define VALID_MIN 100
-#define DRY_THRESHOLD 440
+#define DRY_THRESHOLD 350
 #define WET_THRESHOLD 195
 #define MOISTURE_DELTA_THRESHOLD 5
 #define FAULT_CONFIRM_COUNT 3
 #define RECOVERY_CONFIRM_COUNT 50
+
+// TODO: Debug water pump not stopping
 
 enum State { INIT, IDLE, CHECK, WATERING, FAULT, RECOVERY }; 
 enum FaultCode { NONE, SENSOR_INVALID }; 
@@ -110,7 +112,7 @@ void updateStateMachine() {
         digitalWrite(PUMP_PIN_B1_A, HIGH);
       } else {
         digitalWrite(PUMP_PIN_B1_A, LOW);
-        nextRelease = micros() + T_sample;
+        nextRelease = micros() + T_settle;
         state = IDLE;
       }
       break;
