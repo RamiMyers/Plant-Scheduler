@@ -8,7 +8,7 @@
 #define WET_THRESHOLD 195
 #define MOISTURE_DELTA_THRESHOLD 5
 #define FAULT_CONFIRM_COUNT 3
-#define RECOVERY_CONFIRM_COUNT 100
+#define RECOVERY_CONFIRM_COUNT 50
 
 enum State { INIT, IDLE, CHECK, WATERING, FAULT, RECOVERY }; 
 enum FaultCode { NONE, SENSOR_INVALID }; 
@@ -82,7 +82,7 @@ void updateStateMachine() {
       if (sampleTime >= T_budget) deadlineMisses++;
 
       if ((VALID_MIN > moistureValue || moistureValue > VALID_MAX) ||
-          scheduleCounter > 0 && abs(moistureValue - lastMoistureValue) > MOISTURE_DELTA_THRESHOLD)
+          scheduleCounter > 0 && abs(int(moistureValue - lastMoistureValue)) > MOISTURE_DELTA_THRESHOLD)
       {
         faultConfirmCounter++;
         if (faultConfirmCounter >= FAULT_CONFIRM_COUNT) {
@@ -123,8 +123,10 @@ void updateStateMachine() {
           Serial.println("Sensor Fault");
           Serial.print("Moisture Value: ");
           Serial.println(moistureValue);
+          Serial.print("Recover Confirm Counter: ");
+          Serial.println(recoverConfirmCounter);
           if (moistureValue >= VALID_MIN && moistureValue <= VALID_MAX && 
-              abs(moistureValue - lastMoistureValue) <= MOISTURE_DELTA_THRESHOLD) 
+              abs(int(moistureValue - lastMoistureValue)) <= MOISTURE_DELTA_THRESHOLD) 
           {
             recoverConfirmCounter++;
             if (recoverConfirmCounter > RECOVERY_CONFIRM_COUNT)
