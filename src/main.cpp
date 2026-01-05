@@ -70,15 +70,13 @@ void updateStateMachine() {
       scheduleMissesThisCycle = lateness / T_sample;
       scheduleMisses += scheduleMissesThisCycle;
       nextRelease += (scheduleMissesThisCycle + 1) * T_sample;
-      Serial.print("Next Next Release: ");
-      Serial.println(nextRelease);
 
       sampleStart = micros();
       moistureValue = analogRead(SENSOR_PIN);
       sampleEnd = micros();
       sampleTime = sampleEnd - sampleStart;
 
-      if (sampleTime > maxSampleTime) maxSampleTime = sampleTime;
+      if (scheduleCounter > 0 && sampleTime > maxSampleTime) maxSampleTime = sampleTime;
       if (sampleTime >= T_budget) deadlineMisses++;
 
       if ((VALID_MIN > moistureValue || moistureValue > VALID_MAX) ||
