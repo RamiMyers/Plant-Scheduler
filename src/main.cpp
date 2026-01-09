@@ -4,11 +4,10 @@
 #define PUMP_PIN_B2_A 10
 #define VALID_MAX 500
 #define VALID_MIN 100
-#define DRY_THRESHOLD 350
-#define WET_THRESHOLD 195
+#define DRY_THRESHOLD 250
 #define MOISTURE_DELTA_THRESHOLD 5
-#define FAULT_CONFIRM_COUNT 3
-#define RECOVERY_CONFIRM_COUNT 50
+#define FAULT_CONFIRM_COUNT 2
+#define RECOVERY_CONFIRM_COUNT 5
 
 // TODO: Debug water pump not stopping
 
@@ -36,6 +35,7 @@ State state = INIT;
 // Fault Values
 FaultCode lastFaultCode = NONE;
 unsigned faultCount = 0;
+bool faultFlag = false;
 
 void updateStateMachine();
 void logValues();
@@ -64,7 +64,10 @@ void updateStateMachine() {
       break;
     case IDLE:
       if (long(now - nextRelease) >= 0) {
-        state = CHECK;
+        if (faultFlag)
+          state = FAULT;
+        else
+          state = CHECK;
       }
       break;
     case CHECK:
@@ -88,6 +91,7 @@ void updateStateMachine() {
         if (faultConfirmCounter >= FAULT_CONFIRM_COUNT) {
           lastFaultCode = SENSOR_INVALID;
           faultCount++;
+          faultFlag = true;
           state = FAULT;
         } else {
           state = IDLE;
@@ -110,9 +114,11 @@ void updateStateMachine() {
     case WATERING:
       if (now - pumpOn < T_pump_max) {
         digitalWrite(PUMP_PIN_B1_A, HIGH);
+        digitalWrite(PUMP_PIN_B2_A, LOW);
       } else {
         digitalWrite(PUMP_PIN_B1_A, LOW);
-        nextRelease = micros() + T_settle;
+        digitalWrite(PUMP_PIN_B2_A, LOW);
+        nextRelease += T_sample;
         state = IDLE;
       }
       break;
@@ -131,18 +137,23 @@ void updateStateMachine() {
             recoverConfirmCounter++;
             if (recoverConfirmCounter > RECOVERY_CONFIRM_COUNT)
               state = RECOVERY;
+            else
+              state = IDLE;
           } else {
             recoverConfirmCounter = 0;
+            state = IDLE;
           }
           lastMoistureValue = moistureValue;
           break;
       }
+      nextRelease += T_sample;
       break;
     case RECOVERY:
       Serial.println("Recovery Mode");
       nextRelease = micros() + T_sample;
       faultConfirmCounter = 0;
       recoverConfirmCounter = 0;
+      faultFlag = false;
       state = IDLE;
       break;
   }
