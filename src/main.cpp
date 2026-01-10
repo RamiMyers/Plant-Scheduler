@@ -8,11 +8,13 @@
 #define MOISTURE_DELTA_THRESHOLD 5
 #define FAULT_CONFIRM_COUNT 2
 #define RECOVERY_CONFIRM_COUNT 5
-
-// TODO: Debug water pump not stopping
+#define SCHEDULE_MISS_MAX 0
+#define BUDGET_MISS_MAX 0
 
 enum State { INIT, IDLE, CHECK, WATERING, FAULT, RECOVERY }; 
-enum FaultCode { NONE, SENSOR_INVALID }; 
+enum FaultCode { NONE, SENSOR_INVALID, TIMER_INVALID }; 
+
+// TODO: TIMER_INVALID recovery logic
 
 // Constants
 const unsigned long T_sample = 1000000UL;
@@ -22,23 +24,26 @@ const unsigned long T_settle = 5000000UL;
 // Cycle Timers
 unsigned long now, nextRelease, lateness;
 // Sample Timers
-unsigned long sampleStart, sampleEnd, sampleTime, maxSampleTime = 0;
+unsigned long sampleStart, sampleEnd, sampleTime;
 // Pump Timers;
 unsigned long pumpOn, pumpOff;
 // Counters
-unsigned deadlineMisses = 0, scheduleCounter = 0, scheduleMissesThisCycle, scheduleMisses;
+unsigned scheduleCounter;
+unsigned budgetMisses = 0, budgetMissesThisCycle = 0; 
+unsigned scheduleMisses, scheduleMissesThisCycle;
 unsigned faultConfirmCounter = 0, recoverConfirmCounter = 0;
 // Sensor Values
 unsigned moistureValue, lastMoistureValue, deltaMoisture;
 // State
 State state = INIT;
 // Fault Values
-FaultCode lastFaultCode = NONE;
+FaultCode lastFaultCode = NONE, pendingFaultCode = NONE, newFaultCode = NONE;
 unsigned faultCount = 0;
 bool faultFlag = false;
 
 void updateStateMachine();
 void logValues();
+FaultCode latchFaultCode();
 
 void setup() {
   Serial.begin(9600); 
@@ -74,18 +79,23 @@ void updateStateMachine() {
       lateness = now - nextRelease;
       scheduleMissesThisCycle = lateness / T_sample;
       scheduleMisses += scheduleMissesThisCycle;
-      nextRelease += (scheduleMissesThisCycle + 1) * T_sample;
+      nextRelease += T_sample;
 
       sampleStart = micros();
       moistureValue = analogRead(SENSOR_PIN);
       sampleEnd = micros();
       sampleTime = sampleEnd - sampleStart;
 
-      if (scheduleCounter > 0 && sampleTime > maxSampleTime) maxSampleTime = sampleTime;
-      if (sampleTime >= T_budget) deadlineMisses++;
+      budgetMissesThisCycle = sampleTime / T_budget;
+      budgetMisses += budgetMissesThisCycle;
 
-      if ((VALID_MIN > moistureValue || moistureValue > VALID_MAX) ||
-          scheduleCounter > 0 && abs(int(moistureValue - lastMoistureValue)) > MOISTURE_DELTA_THRESHOLD)
+      if (scheduleMissesThisCycle > SCHEDULE_MISS_MAX || budgetMissesThisCycle > BUDGET_MISS_MAX) {
+        lastFaultCode = TIMER_INVALID;
+        faultCount++;
+        faultFlag = true;
+        state = FAULT;
+      } else if ((VALID_MIN > moistureValue || moistureValue > VALID_MAX) || 
+                  scheduleCounter > 0 && abs(int(moistureValue - lastMoistureValue)) > MOISTURE_DELTA_THRESHOLD)
       {
         faultConfirmCounter++;
         if (faultConfirmCounter >= FAULT_CONFIRM_COUNT) {
@@ -109,6 +119,9 @@ void updateStateMachine() {
       scheduleCounter++;
       
       logValues();
+
+      if (scheduleCounter == 1)
+        delay(3200);
 
       break;
     case WATERING:
@@ -145,6 +158,38 @@ void updateStateMachine() {
           }
           lastMoistureValue = moistureValue;
           break;
+        case TIMER_INVALID:
+          Serial.println("Timer Fault");
+          lateness = now - nextRelease;
+          scheduleMissesThisCycle = lateness / T_sample;
+          nextRelease += (scheduleMissesThisCycle + 1) * T_sample;
+
+          sampleStart = micros();
+          moistureValue = analogRead(SENSOR_PIN);
+          sampleEnd = micros();
+          sampleTime = sampleEnd - sampleStart;
+
+          budgetMissesThisCycle = sampleTime / T_budget;
+
+          Serial.print("Schedule Misses This Cycle: ");
+          Serial.println(scheduleMissesThisCycle);
+          Serial.print("Budget Misses This Cycle: ");
+          Serial.println(budgetMissesThisCycle);
+          Serial.print("Recover Confirm Counter: ");
+          Serial.println(recoverConfirmCounter);
+
+          if (scheduleMissesThisCycle <= SCHEDULE_MISS_MAX && budgetMissesThisCycle <= BUDGET_MISS_MAX) 
+          {
+            recoverConfirmCounter++;
+            if (recoverConfirmCounter > RECOVERY_CONFIRM_COUNT)
+              state = RECOVERY;
+            else
+              state = IDLE;
+          } else {
+            recoverConfirmCounter = 0;
+            state = IDLE;
+          }
+          break;
       }
       nextRelease += T_sample;
       break;
@@ -169,12 +214,8 @@ void logValues() {
   Serial.print(sampleTime);
   Serial.println(" micros");
 
-  Serial.print("Max Sample Time: ");
-  Serial.print(maxSampleTime);
-  Serial.println(" micros");
-
-  Serial.print("Deadline Misses: ");
-  Serial.println(deadlineMisses);
+  Serial.print("Budget Misses: ");
+  Serial.println(budgetMisses);
 
 
   Serial.print("Schedule Missed By: ");
@@ -189,4 +230,15 @@ void logValues() {
   Serial.print("Fault Count: ");
   Serial.println(faultCount);
   Serial.println();
+}
+
+FaultCode latchFaultCode() {
+  if ((VALID_MIN > moistureValue || moistureValue > VALID_MAX) ||
+       scheduleCounter > 0 && abs(int(moistureValue - lastMoistureValue)) > MOISTURE_DELTA_THRESHOLD) {
+    return SENSOR_INVALID;
+  } else if (scheduleMisses > SCHEDULE_MISS_MAX || budgetMisses > BUDGET_MISS_MAX) {
+    return TIMER_INVALID;
+  } else {
+    return NONE;
+  }
 }
