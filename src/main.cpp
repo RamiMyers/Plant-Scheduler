@@ -14,8 +14,6 @@
 enum State { INIT, IDLE, CHECK, WATERING, FAULT, RECOVERY }; 
 enum FaultCode { NONE, SENSOR_INVALID, TIMER_INVALID }; 
 
-// TODO: TIMER_INVALID recovery logic
-
 // Constants
 const unsigned long T_sample = 1000000UL;
 const unsigned long T_budget = 500000UL;
@@ -29,8 +27,7 @@ unsigned long sampleStart, sampleEnd, sampleTime;
 unsigned long pumpOn, pumpOff;
 // Counters
 unsigned scheduleCounter;
-unsigned budgetMisses = 0, budgetMissesThisCycle = 0; 
-unsigned scheduleMisses, scheduleMissesThisCycle;
+unsigned budgetMisses = 0, scheduleMisses = 0;
 unsigned faultConfirmCounter = 0, recoverConfirmCounter = 0;
 // Sensor Values
 unsigned moistureValue, lastMoistureValue, deltaMoisture;
@@ -77,8 +74,7 @@ void updateStateMachine() {
       break;
     case CHECK:
       lateness = now - nextRelease;
-      scheduleMissesThisCycle = lateness / T_sample;
-      scheduleMisses += scheduleMissesThisCycle;
+      scheduleMisses += lateness / T_sample;
       nextRelease += T_sample;
 
       sampleStart = micros();
@@ -86,10 +82,9 @@ void updateStateMachine() {
       sampleEnd = micros();
       sampleTime = sampleEnd - sampleStart;
 
-      budgetMissesThisCycle = sampleTime / T_budget;
-      budgetMisses += budgetMissesThisCycle;
+      budgetMisses += sampleTime / T_budget;
 
-      if (scheduleMissesThisCycle > SCHEDULE_MISS_MAX || budgetMissesThisCycle > BUDGET_MISS_MAX) {
+      if (scheduleMisses > SCHEDULE_MISS_MAX || budgetMisses > BUDGET_MISS_MAX) {
         lastFaultCode = TIMER_INVALID;
         faultCount++;
         faultFlag = true;
@@ -161,24 +156,24 @@ void updateStateMachine() {
         case TIMER_INVALID:
           Serial.println("Timer Fault");
           lateness = now - nextRelease;
-          scheduleMissesThisCycle = lateness / T_sample;
-          nextRelease += (scheduleMissesThisCycle + 1) * T_sample;
+          scheduleMisses= lateness / T_sample;
+          nextRelease += T_sample;
 
           sampleStart = micros();
           moistureValue = analogRead(SENSOR_PIN);
           sampleEnd = micros();
           sampleTime = sampleEnd - sampleStart;
 
-          budgetMissesThisCycle = sampleTime / T_budget;
+          budgetMisses= sampleTime / T_budget;
 
           Serial.print("Schedule Misses This Cycle: ");
-          Serial.println(scheduleMissesThisCycle);
+          Serial.println(scheduleMisses);
           Serial.print("Budget Misses This Cycle: ");
-          Serial.println(budgetMissesThisCycle);
+          Serial.println(budgetMisses);
           Serial.print("Recover Confirm Counter: ");
           Serial.println(recoverConfirmCounter);
 
-          if (scheduleMissesThisCycle <= SCHEDULE_MISS_MAX && budgetMissesThisCycle <= BUDGET_MISS_MAX) 
+          if (scheduleMisses <= SCHEDULE_MISS_MAX && budgetMisses <= BUDGET_MISS_MAX) 
           {
             recoverConfirmCounter++;
             if (recoverConfirmCounter > RECOVERY_CONFIRM_COUNT)
@@ -198,6 +193,8 @@ void updateStateMachine() {
       nextRelease = micros() + T_sample;
       faultConfirmCounter = 0;
       recoverConfirmCounter = 0;
+      scheduleMisses = 0;
+      budgetMisses = 0;
       faultFlag = false;
       state = IDLE;
       break;
