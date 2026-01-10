@@ -23,7 +23,7 @@ const unsigned long T_settle = 5000000UL;
 unsigned long now, nextRelease, lateness;
 // Sample Timers
 unsigned long sampleStart, sampleEnd, sampleTime;
-// Pump Timers;
+// Pump Timers
 unsigned long pumpOn, pumpOff;
 // Counters
 unsigned scheduleCounter;
@@ -114,9 +114,6 @@ void updateStateMachine() {
       scheduleCounter++;
       
       logValues();
-
-      if (scheduleCounter == 1)
-        delay(3200);
 
       break;
     case WATERING:
